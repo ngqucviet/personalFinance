@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Wallet</title>
+    <link rel="icon" type="image/jpg" href="images/logo.jpg">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- cột trái: nhập liệu & lịch sử -->
+        <div class="column left-col">
+            <h2>Data</h2>
+            
+            <div class="filter-section">
+                <label>Tracked month: </label>
+                <input type="month" id="month-filter">
+            </div>
+
+            <form id="finance-form">
+                <label>Transaction</label>
+                <select id="transaction-type" onchange="toggletoggleAccountSelect()">
+                    <option value="income">Income (+)</option>
+                    <option value="expense">Expense (-)</option>
+                    <option value="transfer">Transfer</option>
+                </select>
+
+                <div id="account-select-container">
+                    <label id="account-label">From:</label>
+                    <select id="account-type-select" required></select>
+                    
+                    <!-- chọn tài khoản Nợ (Chỉ hiện khi chi tiêu) -->
+                    <div id="liability-group" style="margin-top: 10px; display: none;">
+                        <label>Purpose:</label>
+                        <select id="liability-account-select"></select>
+                    </div>
+
+                    <div id="transfer-destination-container" style="margin-top: 10px; display: none;">
+                        <label>To:</label>
+                        <select id="transfer-destination-select"></select>
+                    </div>
+                </div>
+
+                <input type="date" id="date-input" required>
+                <input type="text" id="desc" placeholder="Description (e.g., Shopping)" required>
+                <input type="number" id="amount" placeholder="Amount (VND)" required>
+
+                <button type="submit">Add</button>
+            </form>
+
+            <div class="history">
+                <h3>History</h3>
+                <ul id="transaction-list"></ul>
+            </div>
+            
+            <hr style="margin: 20px 0;">
+            
+            <div class="account-manager">
+                <h3>Account list</h3>
+                <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+                    <input type="text" id="new-account-name" placeholder="Tên tài khoản">
+                    <select id="new-account-type">
+                        <option value="asset">Account</option>
+                        <option value="liability">Expense</option>
+                    </select>
+                    <button onclick="addAccountType()">+ Add</button>
+                </div>
+                <!-- danh sách giao dịch -->
+                <ul id="account-list-manage" style="list-style: none; padding: 0;"></ul>
+            </div>
+        </div>
+
+        <!-- cột phải: báo cáo -->
+        <div class="column right-col">
+            <h2 id="current-view-title">Financial report</h2>
+            <div class="balance-sheet">
+                <div id="chart-container" style="width: 100%; margin-bottom: 20px;">
+                    <canvas id="expenseChart"></canvas>
+                </div>
+                
+                <div id="balance-sheet-content"></div>
+                <div class="row total">
+                    <span>TOTAL ASSETS</span> 
+                    <span id="total-sum">0đ</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

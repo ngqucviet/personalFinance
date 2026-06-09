@@ -1,0 +1,48 @@
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+body { background-color: #f4f7f6; color: #333; }
+.container { display: flex; height: 100vh; }
+.column { padding: 25px; overflow-y: auto; }
+.left-col { flex: 1.3; background: white; border-right: 1px solid #ddd; }
+.right-col { flex: 1; background: #fafafa; }
+.orange { color: #f0ad4e; font-weight: bold; } /* Màu cam đại diện cho giao dịch chuyển tiền */
+h2 { margin-bottom: 20px; border-left: 5px solid #28a745; padding-left: 10px; }
+h3 { font-size: 0.9em; color: #666; text-transform: uppercase; margin-bottom: 10px; }
+
+/* Form */
+form { display: flex; flex-direction: column; gap: 10px; background: #f9f9f9; padding: 15px; border-radius: 8px; }
+input, select, button { padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+button { background: #28a745; color: white; border: none; cursor: pointer; font-weight: bold; }
+button:hover { background: #218838; }
+
+/* Tài khoản */
+.account-input-group { display: flex; gap: 5px; margin-bottom: 10px; }
+#account-list-manage { list-style: none; font-size: 0.9em; }
+#account-list-manage li { display: flex; justify-content: space-between; padding: 8px; background: #eee; margin-bottom: 3px; border-radius: 4px; }
+.orange { color: #f0ad4e; font-weight: bold; } /* Màu cam đại diện cho giao dịch chuyển tiền */
+/* Lịch sử */
+#transaction-list { list-style: none; margin-top: 15px; }
+#transaction-list li { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; background: white; }
+.red { color: #d9534f; font-weight: bold; }
+.blue { color: #0275d8; font-weight: bold; }
+
+/* Báo cáo */
+.balance-sheet { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+.row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f1f1; }
+.sub-row { padding-left: 15px; color: #555; font-size: 0.95em; }
+.total { margin-top: 20px; padding: 15px; background: #e7f3ff; font-weight: bold; font-size: 1.2em; border: none; }
+
+.btn-del { background: none; color: #ccc; padding: 0 5px; font-size: 0.8em; }
+.btn-del:hover { color: red; }
+.btn-del-mini { background: none; border: none; color: #ddd; cursor: pointer; font-size: 1.2em; }
+.btn-del-mini:hover { color: red; }
+
+/* Thêm vào cuối file style.css */
+.account-tag {
+    font-size: 0.75em;
+    background: #eee;
+    padding: 2px 6px;
+    border-radius: 10px;
+    color: #666;
+    margin-top: 4px;
+    display: inline-block;
+}

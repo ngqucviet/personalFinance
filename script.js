@@ -266,4 +266,7 @@ document.getElementById('finance-form').addEventListener('submit', function(e) {
 });
 
 monthFilter.addEventListener('change', renderUI);
-window.onload = initApp;
+window.onload = function() {
+    initApp();
+    toggleAccountSelect(); // Đảm bảo nhãn và giao diện khớp với lựa chọn mặc định ban đầu
+};

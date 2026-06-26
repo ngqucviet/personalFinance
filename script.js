@@ -1,4 +1,4 @@
-// --- KHỞI TẠO DỮ LIỆU ---
+// startData
 let accountList = JSON.parse(localStorage.getItem('accountList')) || [
     { name: 'Cash', type: 'asset', id: 'cash' },
     { name: 'Bank', type: 'asset', id: 'bank' },
@@ -15,7 +15,7 @@ const today = new Date().toISOString().split('T')[0];
 dateInput.value = today;
 if (!monthFilter.value) monthFilter.value = today.slice(0, 7);
 
-// --- QUẢN LÝ TÀI KHOẢN ---
+// manageAccount
 function addAccountType() {
     const nameInput = document.getElementById('new-account-name');
     const typeInput = document.getElementById('new-account-type');
@@ -66,7 +66,7 @@ function deleteTransaction(monthKey, transactionId) {
     }
 }
 
-// --- KHỞI TẠO APP ---
+// app
 function initApp() {
     const assetSelect = document.getElementById('account-type-select');
     const liabilitySelect = document.getElementById('liability-account-select');
@@ -92,7 +92,7 @@ function initApp() {
     renderUI();
 }
 
-// HIỂN THỊ 
+// display
 function renderUI() {
     const selectedMonth = monthFilter.value;
     const transactionsInMonth = allData[selectedMonth] || [];
@@ -126,7 +126,7 @@ function renderUI() {
         `;
     }).reverse().join('');
 
-    //  SỐ DƯ & DÒNG TIỀN
+    // cashFlow
     let monthlyFlow = { income: 0, expense: 0 }; 
     let totalBalances = {}; 
     let monthlyExpenseDetails = {}; 
@@ -157,7 +157,7 @@ function renderUI() {
         });
     });
 
-    // BIỂU ĐỒ 
+    // chart
     const chartLabels = [];
     const chartData = [];
     accountList.forEach(a => {
@@ -168,7 +168,7 @@ function renderUI() {
     });
     renderChart(chartLabels, chartData);
 
-    //  BÁO CÁO TÀI CHÍNH
+    //  financal statements
     const reportEl = document.getElementById('balance-sheet-content');
     document.getElementById('current-view-title').innerText = `Monthly report ${selectedMonth.split('-')[1]}/${selectedMonth.split('-')[0]}`;
     
@@ -225,7 +225,7 @@ function renderChart(labels, data) {
     });
 }
 
-// XỬ LÝ FORM 
+// Process FForm
 document.getElementById('finance-form').addEventListener('submit', function(e) {
     e.preventDefault();
     const dateVal = document.getElementById('date-input').value;
@@ -243,8 +243,8 @@ document.getElementById('finance-form').addEventListener('submit', function(e) {
     if (type === 'income') {
         allData[monthKey].push({ id: now, date: dateVal, desc: desc, amount: amount, type: 'income', account: assetId });
     } else if (type === 'expense') {
-        allData[monthKey].push({ id: now, date: dateVal, desc: `[Chi] ${desc}`, amount: amount, type: 'expense', account: assetId });
-        allData[monthKey].push({ id: now + 1, date: dateVal, desc: `[Phân loại] ${desc}`, amount: amount, type: 'income', account: liabilityId });
+        allData[monthKey].push({ id: now, date: dateVal, desc: `[Expense] ${desc}`, amount: amount, type: 'expense', account: assetId });
+        allData[monthKey].push({ id: now + 1, date: dateVal, desc: `[Type] ${desc}`, amount: amount, type: 'income', account: liabilityId });
     } else if (type === 'transfer') {
         if (assetId === destinationId) {
             alert("The source and destination accounts must not be the same!");
@@ -265,8 +265,9 @@ document.getElementById('finance-form').addEventListener('submit', function(e) {
     renderUI();
 });
 
+
 monthFilter.addEventListener('change', renderUI);
 window.onload = function() {
     initApp();
-    toggleAccountSelect(); // Đảm bảo nhãn và giao diện khớp với lựa chọn mặc định ban đầu
+    toggleAccountSelect();
 };

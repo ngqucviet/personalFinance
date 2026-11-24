@@ -486,7 +486,7 @@ function groupTransactionsForHistory(transactions) {
                 next.type === 'income' &&
                 next.id === t.id + 1 &&
                 typeof next.desc === 'string' &&
-                next.desc.startsWith('[Type] ');
+                (next.desc.startsWith('[Type] ') || next.desc.startsWith('[Phân loại] '));
             const isLegacyTransferPair =
                 t.type === 'transfer_out' &&
                 next.type === 'transfer_in' &&
@@ -508,7 +508,7 @@ function groupTransactionsForHistory(transactions) {
                     ids: [exp.id, liab.id],
                     txType: 'expense',
                     date: exp.date,
-                    desc: exp.desc.replace(/^\[Expense\]\s*/, ''),
+                    desc: exp.desc.replace(/^\[(Expense|Chi)\]\s*/, ''),
                     amount: exp.amount,
                     accountId: exp.account,
                     targetId: liab.account,
@@ -1266,19 +1266,45 @@ excelImportInput.addEventListener('change', function(event) {
             const seed = { value: Date.now() };
             let importedCount = 0;
 
-            rawTxs.forEach(row => {
+            for (let i = 0; i < rawTxs.length; i++) {
+                const row = rawTxs[i];
                 const dateStr = normalizeExcelDate(row.Date);
                 const txType = String(row.Type ?? '').trim().toLowerCase();
                 const desc = String(row.Description ?? '').trim();
                 const amount = parseFloat(row.Amount);
 
-                if (!dateStr || !txType || isNaN(amount) || amount <= 0) return;
+                if (!dateStr || !txType || isNaN(amount) || amount <= 0) continue;
 
                 const monthKey = dateStr.slice(0, 7);
                 if (!importedData[monthKey]) importedData[monthKey] = [];
 
                 const baseId = seed.value;
                 seed.value += 2;
+
+                // Auto-merge legacy ungrouped [Chi] + [Phân loại] rows from older exports
+                if (txType === 'expense' && desc.startsWith('[Chi] ') && !row.Target && !row.TargetId && i + 1 < rawTxs.length) {
+                    const nextRow = rawTxs[i + 1];
+                    const nextDate = normalizeExcelDate(nextRow.Date);
+                    const nextType = String(nextRow.Type ?? '').trim().toLowerCase();
+                    const nextDesc = String(nextRow.Description ?? '').trim();
+                    const nextAmount = parseFloat(nextRow.Amount);
+                    if (nextDate === dateStr && nextType === 'income' && nextAmount === amount && nextDesc.startsWith('[Phân loại] ')) {
+                        const srcAcc = resolveOrCreateAccount(importedAccounts, row.AccountId, row.Account, 'asset', seed);
+                        const catAcc = resolveOrCreateAccount(importedAccounts, nextRow.AccountId, nextRow.Account, 'liability', seed);
+                        if (srcAcc && catAcc) {
+                            const cleanDesc = desc.replace(/^\[Chi\]\s*/, '');
+                            importedData[monthKey].push({
+                                id: baseId, groupId: baseId, date: dateStr, desc: `[Expense] ${cleanDesc}`, amount, type: 'expense', account: srcAcc.id
+                            });
+                            importedData[monthKey].push({
+                                id: baseId + 1, groupId: baseId, date: dateStr, desc: `[Type] ${cleanDesc}`, amount, type: 'income', account: catAcc.id
+                            });
+                            importedCount++;
+                            i++;
+                            continue;
+                        }
+                    }
+                }
 
                 if (txType === 'income') {
                     const acc = resolveOrCreateAccount(importedAccounts, row.AccountId, row.Account, 'asset', seed);
@@ -1289,19 +1315,27 @@ excelImportInput.addEventListener('change', function(event) {
                     importedCount++;
                 } else if (txType === 'expense') {
                     const srcAcc = resolveOrCreateAccount(importedAccounts, row.AccountId, row.Account, 'asset', seed);
-                    const catAcc = resolveOrCreateAccount(importedAccounts, row.TargetId, row.Target, 'liability', seed);
-                    if (!srcAcc || !catAcc) return;
-                    importedData[monthKey].push({
-                        id: baseId, groupId: baseId, date: dateStr, desc: `[Expense] ${desc || 'Expense'}`, amount, type: 'expense', account: srcAcc.id
-                    });
-                    importedData[monthKey].push({
-                        id: baseId + 1, groupId: baseId, date: dateStr, desc: `[Type] ${desc || 'Expense'}`, amount, type: 'income', account: catAcc.id
-                    });
+                    if (!srcAcc) continue;
+                    const hasTarget = String(row.TargetId ?? '').trim() !== '' || String(row.Target ?? '').trim() !== '';
+                    if (!hasTarget) {
+                        importedData[monthKey].push({
+                            id: baseId, date: dateStr, desc: desc || 'Expense', amount, type: 'expense', account: srcAcc.id
+                        });
+                    } else {
+                        const catAcc = resolveOrCreateAccount(importedAccounts, row.TargetId, row.Target, 'liability', seed);
+                        if (!catAcc) continue;
+                        importedData[monthKey].push({
+                            id: baseId, groupId: baseId, date: dateStr, desc: `[Expense] ${desc || 'Expense'}`, amount, type: 'expense', account: srcAcc.id
+                        });
+                        importedData[monthKey].push({
+                            id: baseId + 1, groupId: baseId, date: dateStr, desc: `[Type] ${desc || 'Expense'}`, amount, type: 'income', account: catAcc.id
+                        });
+                    }
                     importedCount++;
                 } else if (txType === 'transfer') {
                     const srcAcc = resolveOrCreateAccount(importedAccounts, row.AccountId, row.Account, 'asset', seed);
                     const destAcc = resolveOrCreateAccount(importedAccounts, row.TargetId, row.Target, 'asset', seed);
-                    if (!srcAcc || !destAcc || srcAcc.id === destAcc.id) return;
+                    if (!srcAcc || !destAcc || srcAcc.id === destAcc.id) continue;
                     importedData[monthKey].push({
                         id: baseId, groupId: baseId, date: dateStr, desc: `[Move] ${desc || 'Transfer'} (To ${destAcc.name})`, amount, type: 'transfer_out', account: srcAcc.id
                     });
@@ -1311,13 +1345,13 @@ excelImportInput.addEventListener('change', function(event) {
                     importedCount++;
                 } else if (txType === 'transfer_out' || txType === 'transfer_in') {
                     const acc = resolveOrCreateAccount(importedAccounts, row.AccountId, row.Account, 'asset', seed);
-                    if (!acc) return;
+                    if (!acc) continue;
                     importedData[monthKey].push({
                         id: baseId, date: dateStr, desc: desc || 'Transfer', amount, type: txType, account: acc.id
                     });
                     importedCount++;
                 }
-            });
+            }
 
             if (hasNonEmptyTxRow && importedCount === 0) {
                 alert('No valid transactions found in the "Transactions" sheet.');

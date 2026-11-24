@@ -55,8 +55,9 @@ body { background-color: var(--bg-body); color: var(--text-main); transition: ba
 .left-col { flex: 1.3; background: var(--bg-panel); border-right: 1px solid var(--border-color); }
 .right-col { flex: 1; background: var(--bg-right); }
 
-.top-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.top-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 10px; }
 .top-header h2 { margin-bottom: 0; }
+.header-toggles { display: flex; align-items: center; gap: 6px; }
 
 h2 { margin-bottom: 20px; border-left: 5px solid var(--accent); padding-left: 10px; }
 h3 { font-size: 0.9em; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px; }
@@ -91,8 +92,6 @@ button:hover { background: var(--accent-hover); }
 .form-actions button { flex: 1; min-width: 90px; }
 .btn-secondary { background: #6c757d; color: white; }
 .btn-secondary:hover { background: #5a6268; }
-.btn-outline-sm { background: transparent; color: var(--accent); border: 1px solid var(--accent); font-size: 13px; }
-.btn-outline-sm:hover { background: var(--accent-soft); }
 
 .edit-banner {
     background: var(--edit-banner-bg);
@@ -259,8 +258,9 @@ button:hover { background: var(--accent-hover); }
 
 /* History */
 .history { margin-top: 20px; }
-.history-filters { display: flex; gap: 8px; margin-top: 8px; }
-.history-filters input { flex: 1; min-width: 0; }
+.history-filters { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.history-filters input { flex: 1.5; min-width: 160px; }
+.history-filters select { flex: 1; min-width: 110px; }
 #transaction-list {
     list-style: none;
     margin-top: 12px;

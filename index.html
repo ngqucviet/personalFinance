@@ -11,12 +11,15 @@
 </head>
 <body>
     <div class="container">
-        <!-- Left column: Data entry, templates, history, budgets, accounts & backup -->
+        <!-- Left column: Data entry, recurring, history, budgets, accounts & backup -->
         <div class="column left-col">
             <div class="entry-section">
                 <div class="top-header">
                     <h2>Data</h2>
-                    <button type="button" id="theme-toggle-btn" class="btn-theme" onclick="toggleTheme()" title="Toggle dark mode">🌙 Dark</button>
+                    <div class="header-toggles">
+                        <button type="button" id="privacy-toggle-btn" class="btn-theme" title="Hide or show monetary amounts">👁 Hide</button>
+                        <button type="button" id="theme-toggle-btn" class="btn-theme" title="Toggle dark mode">🌙 Dark</button>
+                    </div>
                 </div>
 
                 <div class="filter-section">
@@ -26,11 +29,11 @@
 
                 <form id="finance-form">
                     <div id="edit-banner" class="edit-banner" style="display: none;">
-                        Editing transaction
+                        Editing transaction (press Esc to cancel)
                     </div>
 
                     <label for="transaction-type">Transaction</label>
-                    <select id="transaction-type" onchange="toggleAccountSelect()">
+                    <select id="transaction-type">
                         <option value="income">Income (+)</option>
                         <option value="expense">Expense (-)</option>
                         <option value="transfer">Transfer</option>
@@ -59,7 +62,7 @@
 
                     <div id="recurring-option-row" class="recurring-option-row">
                         <label class="recurring-checkbox-label">
-                            <input type="checkbox" id="is-recurring" onchange="toggleRecurringSelect()">
+                            <input type="checkbox" id="is-recurring">
                             <span>Recurring transaction</span>
                         </label>
                         <select id="recurring-frequency" style="display: none;" aria-label="Recurring frequency">
@@ -72,14 +75,14 @@
 
                     <div class="form-actions">
                         <button type="submit" id="submit-btn">Add</button>
-                        <button type="button" id="cancel-edit-btn" class="btn-secondary" style="display: none;" onclick="cancelEdit()">Cancel</button>
+                        <button type="button" id="cancel-edit-btn" class="btn-secondary" style="display: none;">Cancel</button>
                     </div>
                 </form>
 
                 <div class="recurring-manager">
                     <div class="recurring-header">
                         <h3>Recurring</h3>
-                        <button type="button" id="record-due-btn" class="btn-mini-action" onclick="recordDueRecurring()">Record Due</button>
+                        <button type="button" id="record-due-btn" class="btn-mini-action">Record Due</button>
                     </div>
                     <ul id="recurring-list"></ul>
                 </div>
@@ -95,6 +98,9 @@
                         <option value="expense">Expense (-)</option>
                         <option value="transfer">Transfer (⇄)</option>
                     </select>
+                    <select id="history-account-filter" aria-label="Filter by account">
+                        <option value="all">All accounts</option>
+                    </select>
                 </div>
                 <ul id="transaction-list"></ul>
             </div>
@@ -106,7 +112,7 @@
                 <div class="budget-input-group">
                     <select id="budget-target-select" aria-label="Budget category"></select>
                     <input type="number" id="budget-amount-input" placeholder="Limit (VND)" min="0" step="any">
-                    <button type="button" onclick="saveBudget()">Set</button>
+                    <button type="button" id="save-budget-btn">Set</button>
                 </div>
                 <ul id="budget-list-manage"></ul>
             </div>
@@ -121,7 +127,7 @@
                         <option value="asset">Asset</option>
                         <option value="liability">Expense</option>
                     </select>
-                    <button type="button" onclick="addAccountType()">+ Add</button>
+                    <button type="button" id="add-account-btn">+ Add</button>
                 </div>
                 <div class="account-columns">
                     <div class="account-column-box">
@@ -140,8 +146,8 @@
             <div class="backup-manager">
                 <h3>Backup &amp; Restore (Excel)</h3>
                 <div class="backup-actions">
-                    <button type="button" class="btn-outline" onclick="exportToExcel()">Export Excel (.xlsx)</button>
-                    <button type="button" class="btn-outline" onclick="triggerImportExcel()">Restore Excel (.xlsx)</button>
+                    <button type="button" id="export-excel-btn" class="btn-outline">Export Excel (.xlsx)</button>
+                    <button type="button" id="import-excel-btn" class="btn-outline">Restore Excel (.xlsx)</button>
                     <input type="file" id="excel-import-input" accept=".xlsx,.xls" style="display: none;">
                 </div>
             </div>

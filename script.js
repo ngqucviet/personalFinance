@@ -660,17 +660,31 @@ function initApp() {
         .map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`)
         .join('');
 
-    const manageList = document.getElementById('account-list-manage');
-    manageList.innerHTML = accountList.map(a => `
-        <li>
-            <span>${escapeHtml(a.name)} <strong>(${a.type === 'asset' ? 'Asset' : 'Expense'})</strong></span>
-            <div class="item-actions">
-                ${a.type === 'asset' ? `<button type="button" onclick="adjustAccountBalance('${escapeHtml(a.id)}')" class="btn-adjust-mini" title="Adjust balance">⚖</button>` : ''}
-                <button type="button" onclick="renameAccount('${escapeHtml(a.id)}')" class="btn-edit-mini" title="Rename account">✎</button>
-                <button type="button" onclick="deleteAccount('${escapeHtml(a.id)}')" class="btn-del-mini" title="Delete account">✖</button>
-            </div>
-        </li>
-    `).join('');
+    const assetListEl = document.getElementById('asset-account-list');
+    const expenseListEl = document.getElementById('expense-account-list');
+
+    const renderAccountItems = (items) => {
+        if (items.length === 0) {
+            return `<li class="empty-msg">None</li>`;
+        }
+        return items.map(a => `
+            <li>
+                <span title="${escapeHtml(a.name)}">${escapeHtml(a.name)}</span>
+                <div class="item-actions">
+                    ${a.type === 'asset' ? `<button type="button" onclick="adjustAccountBalance('${escapeHtml(a.id)}')" class="btn-adjust-mini" title="Adjust balance">⚖</button>` : ''}
+                    <button type="button" onclick="renameAccount('${escapeHtml(a.id)}')" class="btn-edit-mini" title="Rename account">✎</button>
+                    <button type="button" onclick="deleteAccount('${escapeHtml(a.id)}')" class="btn-del-mini" title="Delete account">✖</button>
+                </div>
+            </li>
+        `).join('');
+    };
+
+    if (assetListEl) {
+        assetListEl.innerHTML = renderAccountItems(accountList.filter(a => a.type === 'asset'));
+    }
+    if (expenseListEl) {
+        expenseListEl.innerHTML = renderAccountItems(accountList.filter(a => a.type === 'liability'));
+    }
 
     renderBudgetsManager();
     renderRecurringList();

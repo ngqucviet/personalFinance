@@ -123,7 +123,16 @@
                     </select>
                     <button type="button" onclick="addAccountType()">+ Add</button>
                 </div>
-                <ul id="account-list-manage"></ul>
+                <div class="account-columns">
+                    <div class="account-column-box">
+                        <h4 class="account-col-title">Assets</h4>
+                        <ul id="asset-account-list" class="account-sublist"></ul>
+                    </div>
+                    <div class="account-column-box">
+                        <h4 class="account-col-title">Expenses</h4>
+                        <ul id="expense-account-list" class="account-sublist"></ul>
+                    </div>
+                </div>
             </div>
 
             <hr class="section-divider">

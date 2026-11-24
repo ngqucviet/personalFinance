@@ -1,18 +1,25 @@
-# personalFinance - Double-Entry Inspired Cash Flow Tracker
+# personalFinance - Personal Cash Flow & Budget Tracker
 
-A lightweight, single-page web application designed to manage personal finances using a double-entry accounting mental model. Users can track real-time income, log structural expenses against asset/liability accounts, execute internal transfers, and visualize monthly expenditure trends.
+A lightweight, single-page web application for managing personal finances using a double-entry inspired model. Designed with a clean English interface (with full UTF-8 / Vietnamese text support for inputs and exports), responsive desktop/mobile layout, and Light/Dark themes.
 
 ### 🚀 Key Features
-*   **Dual-Account Classification:** Supports dynamic creation of **Asset** accounts and **Liability/Expense** categories to properly map where money comes from and where it goes.
-*   **Multi-Type Transaction Management:** 
-    *   *Income:* Logs positive cash flow directly into asset accounts.
-    *   *Expense:* Simultaneously deducts from an asset account while categorizing the purpose under an expense/liability log.
-    *   *Transfer:* Handles internal funds movement between asset accounts with strict source/destination validation.
-*   **Historical Monthly Archiving:** Automatically groups and filters transaction history, financial reports, and net worth calculations by the selected month.
-*   **Interactive Data Visualization:** Integrates **Chart.js** to render dynamic Doughnut charts detailing expenditure allocation based on liability group distributions.
-*   **Local Data Persistence:** Utilizes browser `localStorage` to securely save transaction ledgers and custom account settings without needing a backend database.
+*   **Dual-Account Management:** Create, rename, adjust asset balances (`⚖`), and safely delete **Asset** accounts (Cash, Bank, etc.) and **Expense** categories, with validation against deleting accounts in use.
+*   **Unified Transaction History:**
+    *   Supports **Income (+)**, **Expense (-)**, and **Transfer (⇄)** transactions.
+    *   Automatically merges paired ledger entries (Expense + Category, Transfer Out + Transfer In) into single history rows that can be **edited** or **deleted together** in one click.
+    *   Includes real-time **search** (by description or account) and **transaction type filtering**.
+*   **Recurring Transactions:** Schedule repeating transactions (**Daily**, **Weekly**, **Monthly**, or **Yearly**) and record due entries in one click.
+*   **Monthly Financial Reports & Budgets:**
+    *   Calculates **Monthly Income**, **Monthly Spending**, **Monthly Net Cashflow**, and cumulative **Asset Balances / Net Worth**.
+    *   Configure **Monthly Budgets** (overall spending and per-category limits) with color-coded progress bars and over-budget alerts.
+*   **Interactive Charts (Chart.js):**
+    *   **Expenditure Allocation (Doughnut Chart):** Visualizes monthly spending breakdown by expense category.
+    *   **6-Month Trend (Bar Chart):** Compares monthly income vs. spending across the trailing 6 months.
+*   **Excel Backup & Restore (`.xlsx`):** Export all transactions, accounts, budgets, and recurring rules to an Excel workbook (`SheetJS`), and restore data cleanly from `.xlsx` / `.xls` files.
+*   **Dark Mode & Responsive Layout:** Persistent Light/Dark theme toggle via `localStorage` and adaptive portrait/mobile ordering that keeps data entry at the top followed immediately by charts and reports.
 
 ### 🛠️ Tech Stack
-*   **Frontend:** HTML, JavaScript, CSS.
+*   **Frontend:** HTML5, CSS3 (CSS Variables, Flexbox, Responsive Media Queries), Vanilla JavaScript.
 *   **Data Visualization:** Chart.js (via CDN).
+*   **Excel Export/Import:** SheetJS (`xlsx` via CDN).
 *   **Storage:** Web Storage API (`localStorage`).

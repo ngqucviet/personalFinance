@@ -6,8 +6,21 @@ let accountList = JSON.parse(localStorage.getItem('accountList')) || [
 ];
 
 let allData = JSON.parse(localStorage.getItem('financeData')) || {};
+let budgetMap = JSON.parse(localStorage.getItem('budgetMap')) || {};
+let recurringRules = JSON.parse(localStorage.getItem('recurringRules')) || [];
+
 let expenseChart = null;
+let trendChart = null;
 let editingState = null; // { monthKey, ids }
+let lastGeneratedId = 0;
+
+function nextUniqueId() {
+    const candidate = Math.max(Date.now(), lastGeneratedId + 2);
+    lastGeneratedId = candidate;
+    return candidate;
+}
+
+const OVERALL_BUDGET_KEY = '__total__';
 
 function getLocalDateString(dateObj = new Date()) {
     const year = dateObj.getFullYear();
@@ -36,6 +49,7 @@ function escapeHtml(value) {
 }
 
 function getAccountName(id) {
+    if (id === OVERALL_BUDGET_KEY) return 'Overall Monthly Spending';
     const acc = accountList.find(a => a.id === id);
     return acc ? acc.name : 'N/A';
 }
@@ -47,7 +61,28 @@ function getSelectedMonth() {
     return monthFilter.value;
 }
 
-// Account management
+// Theme (Light / Dark Mode)
+function applySavedTheme() {
+    const saved = localStorage.getItem('theme') || 'light';
+    document.body.classList.toggle('dark-mode', saved === 'dark');
+    updateThemeButton();
+}
+
+function updateThemeButton() {
+    const btn = document.getElementById('theme-toggle-btn');
+    if (!btn) return;
+    const isDark = document.body.classList.contains('dark-mode');
+    btn.innerText = isDark ? '☀️ Light' : '🌙 Dark';
+}
+
+function toggleTheme() {
+    const isDark = document.body.classList.toggle('dark-mode');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    updateThemeButton();
+    renderUI();
+}
+
+// Account management (Add / Rename / Delete)
 function addAccountType() {
     const nameInput = document.getElementById('new-account-name');
     const typeInput = document.getElementById('new-account-type');
@@ -69,6 +104,75 @@ function addAccountType() {
     initApp();
 }
 
+function renameAccount(id) {
+    const targetAcc = accountList.find(a => a.id === id);
+    if (!targetAcc) return;
+
+    const proposed = prompt('Enter new account name:', targetAcc.name);
+    if (proposed === null) return;
+
+    const trimmedName = proposed.trim();
+    if (!trimmedName) {
+        alert('Account name cannot be empty.');
+        return;
+    }
+
+    const duplicate = accountList.some(
+        a => a.id !== id && a.type === targetAcc.type && a.name.trim().toLowerCase() === trimmedName.toLowerCase()
+    );
+    if (duplicate) {
+        alert('Another account with this name already exists in the same category.');
+        return;
+    }
+
+    targetAcc.name = trimmedName;
+    localStorage.setItem('accountList', JSON.stringify(accountList));
+    initApp();
+}
+
+function adjustAccountBalance(id) {
+    const targetAcc = accountList.find(a => a.id === id && a.type === 'asset');
+    if (!targetAcc) return;
+
+    const balances = computeAllAssetBalances();
+    const currentBalance = balances[id] || 0;
+
+    const input = prompt(
+        `Current balance for "${targetAcc.name}": ${currentBalance.toLocaleString()}đ\nEnter actual balance (VND):`,
+        currentBalance
+    );
+    if (input === null) return;
+
+    const actualBalance = parseFloat(input.replace(/,/g, '').trim());
+    if (isNaN(actualBalance) || !isFinite(actualBalance)) {
+        alert('Please enter a valid number.');
+        return;
+    }
+
+    const diff = actualBalance - currentBalance;
+    if (diff === 0) {
+        alert('Balance is already up to date.');
+        return;
+    }
+
+    const adjDate = dateInput.value || getLocalDateString();
+    const monthKey = adjDate.slice(0, 7);
+    if (!allData[monthKey]) allData[monthKey] = [];
+
+    allData[monthKey].push({
+        id: nextUniqueId(),
+        date: adjDate,
+        desc: '[Adjust] Balance adjustment',
+        amount: Math.abs(diff),
+        type: diff > 0 ? 'income' : 'expense',
+        account: id
+    });
+
+    localStorage.setItem('financeData', JSON.stringify(allData));
+    monthFilter.value = monthKey;
+    renderUI();
+}
+
 function deleteAccount(id) {
     const targetAcc = accountList.find(a => a.id === id);
     if (!targetAcc) return;
@@ -79,16 +183,26 @@ function deleteAccount(id) {
         return;
     }
 
-    const isUsed = Object.values(allData).some(
+    const isUsedInTx = Object.values(allData).some(
         monthTxs => Array.isArray(monthTxs) && monthTxs.some(t => t.account === id)
     );
-    if (isUsed) {
+    if (isUsedInTx) {
         alert('Cannot delete this account because it is used in existing transactions. Please edit or delete those transactions first.');
+        return;
+    }
+
+    const isUsedInRecurring = recurringRules.some(rule => rule.accountId === id || rule.targetId === id);
+    if (isUsedInRecurring) {
+        alert('Cannot delete this account because it is used in a Recurring rule. Please remove that rule first.');
         return;
     }
 
     if (confirm('Delete this account?')) {
         accountList = accountList.filter(a => a.id !== id);
+        if (budgetMap[id]) {
+            delete budgetMap[id];
+            localStorage.setItem('budgetMap', JSON.stringify(budgetMap));
+        }
         localStorage.setItem('accountList', JSON.stringify(accountList));
         initApp();
     }
@@ -112,6 +226,242 @@ function toggleAccountSelect() {
         label.innerText = 'To (Account):';
         liabilityGroup.style.display = 'none';
         transferContainer.style.display = 'none';
+    }
+}
+
+// Budget management
+function saveBudget() {
+    const targetId = document.getElementById('budget-target-select').value;
+    const amountInput = document.getElementById('budget-amount-input');
+    const amount = parseFloat(amountInput.value);
+
+    if (!targetId) return;
+    if (isNaN(amount) || amount < 0) {
+        alert('Please enter a valid budget limit (0 or higher).');
+        return;
+    }
+
+    if (amount === 0) {
+        delete budgetMap[targetId];
+    } else {
+        budgetMap[targetId] = amount;
+    }
+
+    localStorage.setItem('budgetMap', JSON.stringify(budgetMap));
+    amountInput.value = '';
+    renderBudgetsManager();
+    renderUI();
+}
+
+function removeBudget(targetId) {
+    delete budgetMap[targetId];
+    localStorage.setItem('budgetMap', JSON.stringify(budgetMap));
+    renderBudgetsManager();
+    renderUI();
+}
+
+function renderBudgetsManager() {
+    const budgetSelect = document.getElementById('budget-target-select');
+    const listEl = document.getElementById('budget-list-manage');
+    if (!budgetSelect || !listEl) return;
+
+    const currentVal = budgetSelect.value;
+    const expenseAccounts = accountList.filter(a => a.type === 'liability');
+
+    budgetSelect.innerHTML =
+        `<option value="${OVERALL_BUDGET_KEY}">Overall Monthly Spending</option>` +
+        expenseAccounts
+            .map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`)
+            .join('');
+
+    if (currentVal && [...budgetSelect.options].some(o => o.value === currentVal)) {
+        budgetSelect.value = currentVal;
+    }
+
+    const entries = Object.entries(budgetMap).filter(
+        ([key, val]) => val > 0 && (key === OVERALL_BUDGET_KEY || accountList.some(a => a.id === key && a.type === 'liability'))
+    );
+
+    if (entries.length === 0) {
+        listEl.innerHTML = `<li class="empty-msg">No monthly budgets configured.</li>`;
+        return;
+    }
+
+    listEl.innerHTML = entries
+        .map(([key, limit]) => `
+            <li>
+                <span>${escapeHtml(getAccountName(key))}: <strong>${limit.toLocaleString()}đ</strong></span>
+                <button type="button" class="btn-del-mini" onclick="removeBudget('${escapeHtml(key)}')" title="Remove budget">✕</button>
+            </li>
+        `)
+        .join('');
+}
+
+// Recurring Transactions (Daily / Weekly / Monthly / Yearly)
+function toggleRecurringSelect() {
+    const isRecurring = document.getElementById('is-recurring').checked;
+    document.getElementById('recurring-frequency').style.display = isRecurring ? 'inline-block' : 'none';
+}
+
+function advanceRecurringDate(dateStr, frequency) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    if (frequency === 'daily') {
+        return getLocalDateString(new Date(y, m - 1, d + 1));
+    }
+    if (frequency === 'weekly') {
+        return getLocalDateString(new Date(y, m - 1, d + 7));
+    }
+    if (frequency === 'monthly') {
+        const targetMonth = (m - 1) + 1;
+        const lastDay = new Date(y, targetMonth + 1, 0).getDate();
+        return getLocalDateString(new Date(y, targetMonth, Math.min(d, lastDay)));
+    }
+    if (frequency === 'yearly') {
+        const lastDay = new Date(y + 1, m, 0).getDate();
+        return getLocalDateString(new Date(y + 1, m - 1, Math.min(d, lastDay)));
+    }
+    return dateStr;
+}
+
+function insertTransactionRecord({ dateVal, type, desc, amount, accountId, targetId }) {
+    const monthKey = dateVal.slice(0, 7);
+    if (!allData[monthKey]) allData[monthKey] = [];
+
+    const now = nextUniqueId();
+    if (type === 'income') {
+        allData[monthKey].push({ id: now, date: dateVal, desc, amount, type: 'income', account: accountId });
+    } else if (type === 'expense') {
+        allData[monthKey].push({ id: now, groupId: now, date: dateVal, desc: `[Expense] ${desc}`, amount, type: 'expense', account: accountId });
+        allData[monthKey].push({ id: now + 1, groupId: now, date: dateVal, desc: `[Type] ${desc}`, amount, type: 'income', account: targetId });
+    } else if (type === 'transfer') {
+        const srcAcc = getAccountName(accountId);
+        const destAcc = getAccountName(targetId);
+        allData[monthKey].push({ id: now, groupId: now, date: dateVal, desc: `[Move] ${desc} (To ${destAcc})`, amount, type: 'transfer_out', account: accountId });
+        allData[monthKey].push({ id: now + 1, groupId: now, date: dateVal, desc: `[Get from] ${desc} (From ${srcAcc})`, amount, type: 'transfer_in', account: targetId });
+    }
+}
+
+function recordDueRecurring() {
+    const currentToday = getLocalDateString();
+    let recordedCount = 0;
+
+    recurringRules.forEach(rule => {
+        const srcExists = accountList.some(a => a.id === rule.accountId);
+        const targetExists = !rule.targetId || accountList.some(a => a.id === rule.targetId);
+        if (!srcExists || !targetExists) return;
+
+        while (rule.nextDate && rule.nextDate <= currentToday) {
+            insertTransactionRecord({
+                dateVal: rule.nextDate,
+                type: rule.type,
+                desc: rule.desc,
+                amount: rule.amount,
+                accountId: rule.accountId,
+                targetId: rule.targetId
+            });
+            rule.nextDate = advanceRecurringDate(rule.nextDate, rule.frequency);
+            recordedCount++;
+        }
+    });
+
+    if (recordedCount === 0) {
+        alert('No recurring transactions are due up to today.');
+        return;
+    }
+
+    localStorage.setItem('financeData', JSON.stringify(allData));
+    localStorage.setItem('recurringRules', JSON.stringify(recurringRules));
+    renderRecurringList();
+    renderUI();
+}
+
+function recordRecurringItem(ruleId) {
+    const rule = recurringRules.find(r => r.id === ruleId);
+    if (!rule) return;
+
+    const srcExists = accountList.some(a => a.id === rule.accountId);
+    const targetExists = !rule.targetId || accountList.some(a => a.id === rule.targetId);
+    if (!srcExists || !targetExists) {
+        alert('One of the accounts in this recurring rule no longer exists.');
+        return;
+    }
+
+    const recordDate = rule.nextDate || getLocalDateString();
+    insertTransactionRecord({
+        dateVal: recordDate,
+        type: rule.type,
+        desc: rule.desc,
+        amount: rule.amount,
+        accountId: rule.accountId,
+        targetId: rule.targetId
+    });
+    rule.nextDate = advanceRecurringDate(recordDate, rule.frequency);
+
+    localStorage.setItem('financeData', JSON.stringify(allData));
+    localStorage.setItem('recurringRules', JSON.stringify(recurringRules));
+    monthFilter.value = recordDate.slice(0, 7);
+    renderRecurringList();
+    renderUI();
+}
+
+function deleteRecurringRule(ruleId) {
+    if (!confirm('Remove this recurring transaction?')) return;
+    recurringRules = recurringRules.filter(r => r.id !== ruleId);
+    localStorage.setItem('recurringRules', JSON.stringify(recurringRules));
+    renderRecurringList();
+}
+
+function renderRecurringList() {
+    const listEl = document.getElementById('recurring-list');
+    const dueBtn = document.getElementById('record-due-btn');
+    if (!listEl) return;
+
+    const currentToday = getLocalDateString();
+    let dueCount = 0;
+
+    if (recurringRules.length === 0) {
+        listEl.innerHTML = `<li class="empty-msg">No recurring transactions. Check "Recurring transaction" when adding one.</li>`;
+        if (dueBtn) {
+            dueBtn.innerText = 'Record Due';
+            dueBtn.disabled = true;
+        }
+        return;
+    }
+
+    const freqLabels = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly' };
+
+    listEl.innerHTML = recurringRules.map(rule => {
+        const isDue = rule.nextDate && rule.nextDate <= currentToday;
+        if (isDue) dueCount++;
+
+        const accLabel = rule.targetId
+            ? `${getAccountName(rule.accountId)} → ${getAccountName(rule.targetId)}`
+            : getAccountName(rule.accountId);
+        const typeColor = rule.type === 'income' ? 'blue' : (rule.type === 'expense' ? 'red' : 'orange');
+        const sign = rule.type === 'income' ? '+' : (rule.type === 'expense' ? '-' : '⇄ ');
+        const [, mm, dd, yy] = rule.nextDate.match(/^(\d{4})-(\d{2})-(\d{2})$/) || [];
+        const formattedNext = dd ? `${dd}/${mm}/${rule.nextDate.slice(0, 4)}` : rule.nextDate;
+
+        return `
+            <li>
+                <div>
+                    <strong>${escapeHtml(rule.desc)}</strong>
+                    <span class="${typeColor}" style="margin-left: 6px;">${sign}${rule.amount.toLocaleString()}đ</span>
+                    <span class="freq-badge">${escapeHtml(freqLabels[rule.frequency] || rule.frequency)}</span>
+                    ${isDue ? '<span class="due-badge">Due</span>' : ''}<br>
+                    <small style="color: var(--text-muted);">${escapeHtml(accLabel)} · Next: ${escapeHtml(formattedNext)}</small>
+                </div>
+                <div class="recurring-actions">
+                    <button type="button" class="btn-mini-action" onclick="recordRecurringItem('${escapeHtml(rule.id)}')" title="Record next occurrence now">Record</button>
+                    <button type="button" class="btn-del-mini" onclick="deleteRecurringRule('${escapeHtml(rule.id)}')" title="Remove recurring rule">✕</button>
+                </div>
+            </li>
+        `;
+    }).join('');
+
+    if (dueBtn) {
+        dueBtn.innerText = dueCount > 0 ? `Record Due (${dueCount})` : 'Record Due';
+        dueBtn.disabled = dueCount === 0;
     }
 }
 
@@ -217,7 +567,7 @@ function groupTransactionsForHistory(transactions) {
 
 function sortHistoryNewestFirst(items) {
     return items.slice().sort((a, b) => {
-        const dateCmp = b.date.localeCompare(a.date);
+        const dateCmp = (b.date || '').localeCompare(a.date || '');
         if (dateCmp !== 0) return dateCmp;
         return Math.max(...b.ids) - Math.max(...a.ids);
     });
@@ -255,6 +605,9 @@ function startEditTransaction(monthKey, transactionIds) {
 
     editingState = { monthKey, ids: item.ids };
     document.getElementById('edit-banner').style.display = 'block';
+    document.getElementById('recurring-option-row').style.display = 'none';
+    document.getElementById('is-recurring').checked = false;
+    toggleRecurringSelect();
     document.getElementById('submit-btn').innerText = 'Save changes';
     document.getElementById('cancel-edit-btn').style.display = 'inline-block';
 
@@ -266,6 +619,9 @@ function cancelEdit() {
     document.getElementById('finance-form').reset();
     dateInput.value = getLocalDateString();
     document.getElementById('edit-banner').style.display = 'none';
+    document.getElementById('recurring-option-row').style.display = 'flex';
+    document.getElementById('is-recurring').checked = false;
+    toggleRecurringSelect();
     document.getElementById('submit-btn').innerText = 'Add';
     document.getElementById('cancel-edit-btn').style.display = 'none';
     toggleAccountSelect();
@@ -308,11 +664,75 @@ function initApp() {
     manageList.innerHTML = accountList.map(a => `
         <li>
             <span>${escapeHtml(a.name)} <strong>(${a.type === 'asset' ? 'Asset' : 'Expense'})</strong></span>
-            <button type="button" onclick="deleteAccount('${escapeHtml(a.id)}')" class="btn-del-mini" title="Delete account">✖</button>
+            <div class="item-actions">
+                ${a.type === 'asset' ? `<button type="button" onclick="adjustAccountBalance('${escapeHtml(a.id)}')" class="btn-adjust-mini" title="Adjust balance">⚖</button>` : ''}
+                <button type="button" onclick="renameAccount('${escapeHtml(a.id)}')" class="btn-edit-mini" title="Rename account">✎</button>
+                <button type="button" onclick="deleteAccount('${escapeHtml(a.id)}')" class="btn-del-mini" title="Delete account">✖</button>
+            </div>
         </li>
     `).join('');
 
+    renderBudgetsManager();
+    renderRecurringList();
     renderUI();
+}
+
+// Shared balance & monthly cashflow calculations
+function computeAllAssetBalances() {
+    const totalBalances = {};
+    accountList.forEach(a => {
+        totalBalances[a.id] = 0;
+    });
+
+    Object.keys(allData).forEach(month => {
+        (allData[month] || []).forEach(t => {
+            if (!totalBalances.hasOwnProperty(t.account)) return;
+            if (t.type === 'income' || t.type === 'transfer_in') {
+                totalBalances[t.account] += t.amount;
+            } else if (t.type === 'expense' || t.type === 'transfer_out') {
+                totalBalances[t.account] -= t.amount;
+            }
+        });
+    });
+
+    return totalBalances;
+}
+
+function computeMonthlySummary(monthKey) {
+    let income = 0;
+    let expense = 0;
+    const expenseByCategory = {};
+
+    accountList.forEach(a => {
+        if (a.type === 'liability') expenseByCategory[a.id] = 0;
+    });
+
+    (allData[monthKey] || []).forEach(t => {
+        const accInfo = accountList.find(a => a.id === t.account);
+        if (!accInfo) return;
+
+        if (t.type === 'income') {
+            if (accInfo.type === 'asset') income += t.amount;
+            if (accInfo.type === 'liability') expenseByCategory[t.account] = (expenseByCategory[t.account] || 0) + t.amount;
+        } else if (t.type === 'expense') {
+            expense += t.amount;
+        }
+    });
+
+    return { income, expense, expenseByCategory };
+}
+
+function getRecentMonths(endMonthKey, count = 6) {
+    const [yearStr, monthStr] = endMonthKey.split('-');
+    let year = parseInt(yearStr, 10);
+    let month = parseInt(monthStr, 10);
+    const months = [];
+
+    for (let i = count - 1; i >= 0; i--) {
+        const d = new Date(year, month - 1 - i, 1);
+        months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    }
+    return months;
 }
 
 // Render UI & Reports
@@ -343,14 +763,16 @@ function renderUI() {
         listEl.innerHTML = `<li class="empty-msg">No transactions found.</li>`;
     } else {
         listEl.innerHTML = filteredItems.map((item) => {
-            const [, month, day] = item.date.split('-');
+            const dateParts = (item.date || '').split('-');
+            const month = dateParts[1] || '--';
+            const day = dateParts[2] || '--';
             const idListArg = `[${item.ids.join(',')}]`;
             const canEdit = item.txType === 'income' || item.txType === 'expense' || item.txType === 'transfer';
 
             return `
                 <li>
                     <div>
-                        <small style="color: #999;">${escapeHtml(day)}/${escapeHtml(month)}</small><br>
+                        <small style="color: var(--text-muted);">${escapeHtml(day)}/${escapeHtml(month)}</small><br>
                         <strong>${escapeHtml(item.desc)}</strong><br>
                         <span class="account-tag">💳 ${escapeHtml(item.tag)}</span>
                     </div>
@@ -366,62 +788,40 @@ function renderUI() {
         }).join('');
     }
 
-    // Cash flow & balances
-    const monthlyFlow = { income: 0, expense: 0 };
-    const totalBalances = {};
-    const monthlyExpenseDetails = {};
+    // Cumulative asset balances
+    const totalBalances = computeAllAssetBalances();
 
-    accountList.forEach(a => {
-        totalBalances[a.id] = 0;
-        if (a.type === 'liability') monthlyExpenseDetails[a.id] = 0;
-    });
-
-    Object.keys(allData).forEach(month => {
-        (allData[month] || []).forEach(t => {
-            const accInfo = accountList.find(a => a.id === t.account);
-            if (!accInfo) return;
-
-            if (t.type === 'income' || t.type === 'transfer_in') {
-                totalBalances[t.account] += t.amount;
-                if (month === selectedMonth && t.type === 'income') {
-                    if (accInfo.type === 'asset') monthlyFlow.income += t.amount;
-                    if (accInfo.type === 'liability') monthlyExpenseDetails[t.account] += t.amount;
-                }
-            } else if (t.type === 'expense' || t.type === 'transfer_out') {
-                totalBalances[t.account] -= t.amount;
-                if (month === selectedMonth && t.type === 'expense') {
-                    monthlyFlow.expense += t.amount;
-                }
-            }
-        });
-    });
+    const monthlySummary = computeMonthlySummary(selectedMonth);
 
     // Expenditure allocation chart
     const chartLabels = [];
     const chartData = [];
     accountList.forEach(a => {
-        if (a.type === 'liability' && monthlyExpenseDetails[a.id] > 0) {
+        if (a.type === 'liability' && (monthlySummary.expenseByCategory[a.id] || 0) > 0) {
             chartLabels.push(a.name);
-            chartData.push(monthlyExpenseDetails[a.id]);
+            chartData.push(monthlySummary.expenseByCategory[a.id]);
         }
     });
     renderChart(chartLabels, chartData);
+
+    // 6-Month Income vs Spending Trend Chart
+    renderTrendChart(selectedMonth);
 
     // Monthly financial report
     const reportEl = document.getElementById('balance-sheet-content');
     const [yearPart, monthPart] = selectedMonth.split('-');
     document.getElementById('current-view-title').innerText = `Monthly report ${monthPart}/${yearPart}`;
 
-    const netCashflow = monthlyFlow.income - monthlyFlow.expense;
+    const netCashflow = monthlySummary.income - monthlySummary.expense;
     const netSign = netCashflow >= 0 ? '+' : '-';
     const netClass = netCashflow >= 0 ? 'blue' : 'red';
 
     let htmlContent = `
-        <div class="row"><span>Monthly income:</span> <b class="blue">+${monthlyFlow.income.toLocaleString()}đ</b></div>
-        <div class="row"><span>Monthly spending:</span> <b class="red">-${monthlyFlow.expense.toLocaleString()}đ</b></div>
+        <div class="row"><span>Monthly income:</span> <b class="blue">+${monthlySummary.income.toLocaleString()}đ</b></div>
+        <div class="row"><span>Monthly spending:</span> <b class="red">-${monthlySummary.expense.toLocaleString()}đ</b></div>
         <div class="row"><span>Monthly net cashflow:</span> <b class="${netClass}">${netSign}${Math.abs(netCashflow).toLocaleString()}đ</b></div>
-        <hr style="margin: 15px 0; border: 0; border-top: 1px dashed #ccc;">
-        <h3 style="font-size: 0.8em; margin-bottom: 10px; color: #444;">CURRENT ASSETS:</h3>
+        <hr style="margin: 15px 0; border: 0; border-top: 1px dashed var(--border-color);">
+        <h3 class="section-subheading">CURRENT ASSETS:</h3>
     `;
 
     let netWorth = 0;
@@ -434,7 +834,59 @@ function renderUI() {
     });
 
     reportEl.innerHTML = htmlContent;
+    renderBudgetProgress(monthlySummary);
     document.getElementById('total-sum').innerText = netWorth.toLocaleString() + 'đ';
+}
+
+function renderBudgetProgress(monthlySummary) {
+    const container = document.getElementById('budget-progress-section');
+    if (!container) return;
+
+    const activeBudgets = Object.entries(budgetMap).filter(
+        ([key, limit]) => limit > 0 && (key === OVERALL_BUDGET_KEY || accountList.some(a => a.id === key && a.type === 'liability'))
+    );
+
+    if (activeBudgets.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    const itemsHtml = activeBudgets.map(([key, limit]) => {
+        const spent = key === OVERALL_BUDGET_KEY
+            ? monthlySummary.expense
+            : (monthlySummary.expenseByCategory[key] || 0);
+        const pct = Math.round((spent / limit) * 100);
+        const barWidth = Math.min(pct, 100);
+        const barClass = pct >= 100 ? 'bar-over' : (pct >= 80 ? 'bar-warn' : 'bar-ok');
+        const textClass = pct >= 100 ? 'red' : (pct >= 80 ? 'orange' : 'green');
+        const statusLabel = pct >= 100 ? `${pct}% (Over budget!)` : `${pct}%`;
+
+        return `
+            <div class="budget-progress-item">
+                <div class="budget-progress-header">
+                    <span>${escapeHtml(getAccountName(key))}</span>
+                    <span class="${textClass}">${spent.toLocaleString()}đ / ${limit.toLocaleString()}đ (${statusLabel})</span>
+                </div>
+                <div class="budget-bar-bg">
+                    <div class="budget-bar-fill ${barClass}" style="width: ${barWidth}%;"></div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = `
+        <hr style="margin: 15px 0; border: 0; border-top: 1px dashed var(--border-color);">
+        <h3 class="section-subheading">MONTHLY BUDGETS:</h3>
+        <div class="budget-progress-wrap">${itemsHtml}</div>
+    `;
+}
+
+function getChartThemeColors() {
+    const isDark = document.body.classList.contains('dark-mode');
+    return {
+        textColor: isDark ? '#c1cad4' : '#444444',
+        gridColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)'
+    };
 }
 
 function renderChart(labels, data) {
@@ -457,6 +909,8 @@ function renderChart(labels, data) {
     canvas.style.display = 'block';
     if (emptyMsg) emptyMsg.style.display = 'none';
 
+    const { textColor } = getChartThemeColors();
+
     expenseChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
@@ -470,8 +924,81 @@ function renderChart(labels, data) {
         options: {
             responsive: true,
             plugins: {
-                legend: { position: 'bottom' },
-                title: { display: true, text: 'Expenditure allocation' }
+                legend: {
+                    position: 'bottom',
+                    labels: { color: textColor }
+                },
+                title: {
+                    display: true,
+                    text: 'Expenditure allocation',
+                    color: textColor
+                }
+            }
+        }
+    });
+}
+
+function renderTrendChart(endMonthKey) {
+    const canvas = document.getElementById('trendChart');
+    if (!canvas || typeof Chart === 'undefined') return;
+    const ctx = canvas.getContext('2d');
+
+    if (trendChart) {
+        trendChart.destroy();
+        trendChart = null;
+    }
+
+    const recentMonths = getRecentMonths(endMonthKey, 6);
+    const labels = recentMonths.map(m => {
+        const [y, mm] = m.split('-');
+        return `${mm}/${y.slice(2)}`;
+    });
+    const incomeSeries = recentMonths.map(m => computeMonthlySummary(m).income);
+    const expenseSeries = recentMonths.map(m => computeMonthlySummary(m).expense);
+
+    const { textColor, gridColor } = getChartThemeColors();
+
+    trendChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Income',
+                    data: incomeSeries,
+                    backgroundColor: 'rgba(2, 117, 216, 0.75)',
+                    borderRadius: 4
+                },
+                {
+                    label: 'Spending',
+                    data: expenseSeries,
+                    backgroundColor: 'rgba(217, 83, 79, 0.75)',
+                    borderRadius: 4
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    ticks: { color: textColor },
+                    grid: { color: gridColor }
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        color: textColor,
+                        callback: (value) => Number(value).toLocaleString() + 'đ'
+                    },
+                    grid: { color: gridColor }
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { color: textColor }
+                }
             }
         }
     });
@@ -485,9 +1012,12 @@ document.getElementById('finance-form').addEventListener('submit', function(e) {
     const type = document.getElementById('transaction-type').value;
     const amount = parseFloat(document.getElementById('amount').value);
     const desc = document.getElementById('desc').value.trim();
-    const assetId = document.getElementById('account-type-select').value;
+    const accountId = document.getElementById('account-type-select').value;
     const liabilityId = document.getElementById('liability-account-select').value;
     const destinationId = document.getElementById('transfer-destination-select').value;
+    const targetId = type === 'expense' ? liabilityId : (type === 'transfer' ? destinationId : '');
+    const isRecurring = document.getElementById('is-recurring').checked;
+    const frequency = document.getElementById('recurring-frequency').value;
 
     if (!dateVal || !desc) {
         alert('Please fill in all required fields.');
@@ -497,7 +1027,7 @@ document.getElementById('finance-form').addEventListener('submit', function(e) {
         alert('Amount must be greater than 0.');
         return;
     }
-    if (type === 'transfer' && assetId === destinationId) {
+    if (type === 'transfer' && accountId === targetId) {
         alert('The source and destination accounts must not be the same!');
         return;
     }
@@ -509,25 +1039,26 @@ document.getElementById('finance-form').addEventListener('submit', function(e) {
         if (allData[oldMonth].length === 0) delete allData[oldMonth];
     }
 
-    if (!allData[monthKey]) allData[monthKey] = [];
+    insertTransactionRecord({ dateVal, type, desc, amount, accountId, targetId });
 
-    const now = Date.now();
-    if (type === 'income') {
-        allData[monthKey].push({ id: now, date: dateVal, desc, amount, type: 'income', account: assetId });
-    } else if (type === 'expense') {
-        allData[monthKey].push({ id: now, groupId: now, date: dateVal, desc: `[Expense] ${desc}`, amount, type: 'expense', account: assetId });
-        allData[monthKey].push({ id: now + 1, groupId: now, date: dateVal, desc: `[Type] ${desc}`, amount, type: 'income', account: liabilityId });
-    } else if (type === 'transfer') {
-        const srcAcc = getAccountName(assetId);
-        const destAcc = getAccountName(destinationId);
-
-        allData[monthKey].push({ id: now, groupId: now, date: dateVal, desc: `[Move] ${desc} (To ${destAcc})`, amount, type: 'transfer_out', account: assetId });
-        allData[monthKey].push({ id: now + 1, groupId: now, date: dateVal, desc: `[Get from] ${desc} (From ${srcAcc})`, amount, type: 'transfer_in', account: destinationId });
+    if (!editingState && isRecurring) {
+        recurringRules.push({
+            id: 'rec_' + nextUniqueId(),
+            type,
+            desc,
+            accountId,
+            targetId,
+            amount,
+            frequency,
+            nextDate: advanceRecurringDate(dateVal, frequency)
+        });
+        localStorage.setItem('recurringRules', JSON.stringify(recurringRules));
     }
 
     localStorage.setItem('financeData', JSON.stringify(allData));
     monthFilter.value = monthKey;
     cancelEdit();
+    renderRecurringList();
     renderUI();
 });
 
@@ -554,13 +1085,33 @@ function exportToExcel() {
             });
         });
     });
-
     transactionRows.sort((a, b) => a.Date.localeCompare(b.Date));
 
     const accountRows = accountList.map(a => ({
         ID: a.id,
         Name: a.name,
         Type: a.type
+    }));
+
+    const budgetRows = Object.entries(budgetMap)
+        .filter(([, limit]) => limit > 0)
+        .map(([targetId, limit]) => ({
+            TargetId: targetId,
+            TargetName: getAccountName(targetId),
+            Limit: limit
+        }));
+
+    const recurringRows = recurringRules.map(rule => ({
+        ID: rule.id,
+        Type: rule.type,
+        Description: rule.desc,
+        Account: getAccountName(rule.accountId),
+        Target: rule.targetId ? getAccountName(rule.targetId) : '',
+        Amount: rule.amount,
+        Frequency: rule.frequency,
+        NextDate: rule.nextDate,
+        AccountId: rule.accountId,
+        TargetId: rule.targetId || ''
     }));
 
     const wb = XLSX.utils.book_new();
@@ -577,8 +1128,27 @@ function exportToExcel() {
     const accSheet = XLSX.utils.json_to_sheet(accountRows);
     accSheet['!cols'] = [{ wch: 20 }, { wch: 22 }, { wch: 12 }];
 
+    const budgetSheet = XLSX.utils.json_to_sheet(
+        budgetRows.length > 0
+            ? budgetRows
+            : [{ TargetId: '', TargetName: '', Limit: '' }]
+    );
+    budgetSheet['!cols'] = [{ wch: 20 }, { wch: 24 }, { wch: 14 }];
+
+    const recSheet = XLSX.utils.json_to_sheet(
+        recurringRows.length > 0
+            ? recurringRows
+            : [{ ID: '', Type: '', Description: '', Account: '', Target: '', Amount: '', Frequency: '', NextDate: '', AccountId: '', TargetId: '' }]
+    );
+    recSheet['!cols'] = [
+        { wch: 18 }, { wch: 10 }, { wch: 24 }, { wch: 18 },
+        { wch: 18 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 18 }, { wch: 18 }
+    ];
+
     XLSX.utils.book_append_sheet(wb, txSheet, 'Transactions');
     XLSX.utils.book_append_sheet(wb, accSheet, 'Accounts');
+    XLSX.utils.book_append_sheet(wb, budgetSheet, 'Budgets');
+    XLSX.utils.book_append_sheet(wb, recSheet, 'Recurring');
 
     XLSX.writeFile(wb, `personal-finance-backup-${getLocalDateString()}.xlsx`);
 }
@@ -677,8 +1247,9 @@ excelImportInput.addEventListener('change', function(event) {
                     String(row.Amount ?? '').trim() !== '' ||
                     String(row.Description ?? '').trim() !== ''
             );
+
             const importedData = {};
-            let seed = { value: Date.now() };
+            const seed = { value: Date.now() };
             let importedCount = 0;
 
             rawTxs.forEach(row => {
@@ -739,6 +1310,51 @@ excelImportInput.addEventListener('change', function(event) {
                 return;
             }
 
+            let importedBudgets = null;
+            if (workbook.SheetNames.includes('Budgets')) {
+                importedBudgets = {};
+                const rawBudgets = XLSX.utils.sheet_to_json(workbook.Sheets['Budgets'], { defval: '' });
+                rawBudgets.forEach(row => {
+                    const limit = parseFloat(row.Limit);
+                    if (isNaN(limit) || limit <= 0) return;
+                    const rawId = String(row.TargetId ?? '').trim();
+                    if (rawId === OVERALL_BUDGET_KEY) {
+                        importedBudgets[OVERALL_BUDGET_KEY] = limit;
+                        return;
+                    }
+                    const acc = resolveOrCreateAccount(importedAccounts, rawId, row.TargetName, 'liability', seed);
+                    if (acc) importedBudgets[acc.id] = limit;
+                });
+            }
+
+            let importedRecurring = null;
+            if (workbook.SheetNames.includes('Recurring')) {
+                importedRecurring = [];
+                const rawRecurring = XLSX.utils.sheet_to_json(workbook.Sheets['Recurring'], { defval: '' });
+                const validFreqs = ['daily', 'weekly', 'monthly', 'yearly'];
+                rawRecurring.forEach((row, idx) => {
+                    const txType = String(row.Type ?? '').trim().toLowerCase();
+                    const desc = String(row.Description ?? '').trim();
+                    const amount = parseFloat(row.Amount);
+                    const frequency = String(row.Frequency ?? '').trim().toLowerCase();
+                    const nextDate = normalizeExcelDate(row.NextDate) || getLocalDateString();
+                    if (!desc || isNaN(amount) || amount <= 0 || !validFreqs.includes(frequency)) return;
+
+                    if (txType === 'income') {
+                        const acc = resolveOrCreateAccount(importedAccounts, row.AccountId, row.Account, 'asset', seed);
+                        if (acc) importedRecurring.push({ id: String(row.ID || `rec_imp_${Date.now()}_${idx}`), type: 'income', desc, accountId: acc.id, targetId: '', amount, frequency, nextDate });
+                    } else if (txType === 'expense') {
+                        const src = resolveOrCreateAccount(importedAccounts, row.AccountId, row.Account, 'asset', seed);
+                        const cat = resolveOrCreateAccount(importedAccounts, row.TargetId, row.Target, 'liability', seed);
+                        if (src && cat) importedRecurring.push({ id: String(row.ID || `rec_imp_${Date.now()}_${idx}`), type: 'expense', desc, accountId: src.id, targetId: cat.id, amount, frequency, nextDate });
+                    } else if (txType === 'transfer') {
+                        const src = resolveOrCreateAccount(importedAccounts, row.AccountId, row.Account, 'asset', seed);
+                        const dest = resolveOrCreateAccount(importedAccounts, row.TargetId, row.Target, 'asset', seed);
+                        if (src && dest && src.id !== dest.id) importedRecurring.push({ id: String(row.ID || `rec_imp_${Date.now()}_${idx}`), type: 'transfer', desc, accountId: src.id, targetId: dest.id, amount, frequency, nextDate });
+                    }
+                });
+            }
+
             if (!confirm(`Restore ${importedCount} transaction(s) and ${importedAccounts.length} account(s) from Excel? This will replace your current data.`)) {
                 return;
             }
@@ -747,6 +1363,16 @@ excelImportInput.addEventListener('change', function(event) {
             allData = importedData;
             localStorage.setItem('accountList', JSON.stringify(accountList));
             localStorage.setItem('financeData', JSON.stringify(allData));
+
+            if (importedBudgets !== null) {
+                budgetMap = importedBudgets;
+                localStorage.setItem('budgetMap', JSON.stringify(budgetMap));
+            }
+            if (importedRecurring !== null) {
+                recurringRules = importedRecurring;
+                localStorage.setItem('recurringRules', JSON.stringify(recurringRules));
+            }
+
             cancelEdit();
 
             const months = Object.keys(allData).sort();
@@ -769,6 +1395,7 @@ historySearchInput.addEventListener('input', renderUI);
 historyTypeFilter.addEventListener('change', renderUI);
 
 window.onload = function() {
+    applySavedTheme();
     initApp();
     toggleAccountSelect();
 };

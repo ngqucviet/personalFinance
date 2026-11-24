@@ -11,10 +11,13 @@
 </head>
 <body>
     <div class="container">
-        <!-- Left column: Data entry & history -->
+        <!-- Left column: Data entry, templates, history, budgets, accounts & backup -->
         <div class="column left-col">
             <div class="entry-section">
-                <h2>Data</h2>
+                <div class="top-header">
+                    <h2>Data</h2>
+                    <button type="button" id="theme-toggle-btn" class="btn-theme" onclick="toggleTheme()" title="Toggle dark mode">🌙 Dark</button>
+                </div>
 
                 <div class="filter-section">
                     <label for="month-filter">Tracked month:</label>
@@ -54,11 +57,32 @@
                     <input type="text" id="desc" placeholder="Description (e.g., Shopping)" required>
                     <input type="number" id="amount" placeholder="Amount (VND)" min="1" step="any" required>
 
+                    <div id="recurring-option-row" class="recurring-option-row">
+                        <label class="recurring-checkbox-label">
+                            <input type="checkbox" id="is-recurring" onchange="toggleRecurringSelect()">
+                            <span>Recurring transaction</span>
+                        </label>
+                        <select id="recurring-frequency" style="display: none;" aria-label="Recurring frequency">
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="monthly" selected>Monthly</option>
+                            <option value="yearly">Yearly</option>
+                        </select>
+                    </div>
+
                     <div class="form-actions">
                         <button type="submit" id="submit-btn">Add</button>
                         <button type="button" id="cancel-edit-btn" class="btn-secondary" style="display: none;" onclick="cancelEdit()">Cancel</button>
                     </div>
                 </form>
+
+                <div class="recurring-manager">
+                    <div class="recurring-header">
+                        <h3>Recurring</h3>
+                        <button type="button" id="record-due-btn" class="btn-mini-action" onclick="recordDueRecurring()">Record Due</button>
+                    </div>
+                    <ul id="recurring-list"></ul>
+                </div>
             </div>
 
             <div class="history">
@@ -73,6 +97,18 @@
                     </select>
                 </div>
                 <ul id="transaction-list"></ul>
+            </div>
+
+            <hr class="section-divider">
+
+            <div class="budget-manager">
+                <h3>Monthly Budgets</h3>
+                <div class="budget-input-group">
+                    <select id="budget-target-select" aria-label="Budget category"></select>
+                    <input type="number" id="budget-amount-input" placeholder="Limit (VND)" min="0" step="any">
+                    <button type="button" onclick="saveBudget()">Set</button>
+                </div>
+                <ul id="budget-list-manage"></ul>
             </div>
 
             <hr class="section-divider">
@@ -102,7 +138,7 @@
             </div>
         </div>
 
-        <!-- Right column: Financial report -->
+        <!-- Right column: Financial report & charts -->
         <div class="column right-col">
             <h2 id="current-view-title">Financial report</h2>
             <div class="balance-sheet">
@@ -112,9 +148,18 @@
                 </div>
 
                 <div id="balance-sheet-content"></div>
+                <div id="budget-progress-section"></div>
+
                 <div class="row total">
                     <span>TOTAL ASSETS</span>
                     <span id="total-sum">0đ</span>
+                </div>
+            </div>
+
+            <div class="balance-sheet trend-card">
+                <h3>6-Month Trend (Income vs Spending)</h3>
+                <div class="trend-chart-container">
+                    <canvas id="trendChart"></canvas>
                 </div>
             </div>
         </div>
